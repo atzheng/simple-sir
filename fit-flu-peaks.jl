@@ -7,8 +7,10 @@ GAMMA = 0.24
 
 
 function get_sample_peak(seed, sir, I, R)
-    generator = sample_SIR(MersenneTwister(seed), sir;
-                           I0=I[end], R0=R[end], model=:poisson)
+    generator = sample_SIR(
+        MersenneTwister(seed), sir;
+        I0=I[end], R0=R[end], model=:poisson
+    )
     traj = collect(takewhile(x -> x.I > 1, generator))
     Isim = cat(I, map(rpartial(getfield, :I), traj); dims=1)
     Tsim = cat(1:length(I),

@@ -1,5 +1,6 @@
 using ArgParse
 using CSV
+using Printf
 include("sir.jl")
 
 function parse_commandline()
@@ -20,10 +21,7 @@ function parse_commandline()
             default = 0.1
         "--samples"
             arg_type = Int
-            default = 50
-        "--Nmax"
-            arg_type = Int
-            default = Int(1e5)
+            default = 100
         "--N"
             arg_type = Float64
             default = 0.
@@ -40,39 +38,55 @@ function sample_idx(dS, samples)
 end
 
 function fit(I, R, X, Nmax; model_type=:sir, gamma=0., N=0.)
+    "Fit an SIR or Bass model to the data."
     kwargs = if model_type == :bass Dict(:g => 0.)
-    elseif model_type == :sir Dict(:a => 0., :g => 0.) end
+    elseif model_type == :sir Dict(:a => 0., :g => gamma) end
     fit_given_N(N) =
-        SIR_ipopt_mle(I, R, X; model_type=:poisson, N=N, kwargs...)
+        SIR_ipopt_mle(
+            I, R, X;
+            model_type=:poisson,
+            N=N,
+            kwargs...
+                )
     if N == 0.
-        opt_N = optimize(N -> - fit_given_N(N)[:llh],
-                         maximum(I .+ R), Nmax, GoldenSection()).minimizer
+        opt_N = optimize(
+            N -> - fit_given_N(N)[:llh],
+            maximum(I .+ R), Nmax, GoldenSection()
+        ).minimizer
     else
         opt_N = N
     end
     fit_given_N(opt_N)
 end
 
-# args = Dict("input" => "flu/data/2010.01.csv",
-#             "samples" => 10,
-#             "Nmax" => 3e6,
-#             "model_type" => :sir,
-#             "gamma" => 0.24)
-
 function main()
     args = parse_commandline()
     df = DataFrame(CSV.File(args["input"]))
     dS = df[:, 2]
+    Nmax = maximum(df[:, 3])
     I, R = dStoIR(args["gamma"], df[:, 2])
-    ts = filter(relates(>, 1), sample_idx(dS, args["samples"]))
-    results = [fit(I[1:t-1], R[1:t-1], dS[2:t], args["Nmax"];
-                   model_type=args["model_type"],
-                   gamma=args["gamma"],
-                   N=args["N"])
-               for t in ts]
+
+    # llh(a, b, g) = sum(
+    # dS[t] * log((a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t])
+    # - (a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t]
+    # )
+
+    print(args["gamma"])
+    ts = if args["samples"] > 1
+        filter(relates(>, 1), sample_idx(dS, args["samples"]))
+    else
+        [length(dS)] # Fit the entire trajectory
+    end
+    results = [
+        fit(I[1:t-1], R[1:t-1], dS[2:t], Nmax;
+            model_type=args["model_type"],
+            gamma=args["gamma"],
+            N=args["N"])
+        for t in ts
+            ]
     df = DataFrame(results)
-    df[:t] = ts
-    df[:m] = cumsum(dS)[ts]
+    df[!, :t] = ts
+    df[!, :m] = cumsum(dS)[ts]
     CSV.write(args["output"], df)
 end
 

@@ -50,10 +50,10 @@ function poisson_SIR_step(rng, sir, s::SIRState)
     if is_SIR_terminated(sir, s) return nothing end
     S = sir.N - s.I - s.R
     lam = (s.I .* sir.beta .+ sir.alpha) .* S ./ sir.N
-    arrs = rand(rng, Poisson(lam))
-    SIRState((1 - sir.gamma) * s.I + arrs,
-             sir.gamma * s.I + s.R,
-             1)
+    dS = rand(rng, Poisson(lam))
+    dR = min(rand(rng, Poisson(sir.gamma * s.I)), s.I)
+    dI = dS - dR
+    SIRState(s.I + dI, s.R + dR, 1)
 end
 
 function SIR_interarrival_distr(sir::SIR, s::SIRState)
@@ -136,7 +136,7 @@ function SIR_golden_section_mle(sir, param, states;
 end
 
 function SIR_ipopt_mle(data; a=nothing, b=nothing, g=nothing, N=nothing,
-                       Nmax=1e5)
+                       Nmax=1e5, use_weights=true)
     I = map(rpartial(getfield, :I), data)
     R = map(rpartial(getfield, :R), data)
     T = map(rpartial(getfield, :T), data)
@@ -148,23 +148,29 @@ function SIR_ipopt_mle(data; a=nothing, b=nothing, g=nothing, N=nothing,
         @variable(m, N >= maximum(I .+ R) + 1)
         @constraint(m, N <= Nmax)
     end
+    weights = if use_weights I else ones(size(I)) end
     @NLobjective(
         m, Max,
-        sum(log((a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t])
-            - T[t] * (a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t]
-            for t in 1:length(data)))
+        sum(
+            (
+                log((a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t])
+                - T[t] * (a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t]
+            ) * weights[t]
+            for t in 1:length(data)
+           )
+    )
     optimize!(m)
-    Dict(:a => getvalue(a),
-         :beta => getvalue(b),
-         :gamma => getvalue(g),
-         :N => getvalue(N),
+    Dict(:a => value(a),
+         :beta => value(b),
+         :gamma => value(g),
+         :N => value(N),
          :llh => objective_value(m),
          :status => Int(termination_status(m)))
 end
 
 
 fakeSIRStep(gamma, IR, dS) =
-    ((1 - gamma) * IR[1] + dS, IR[2] + gamma * IR[1])
+    (max((1 - gamma), 0) * IR[1] + dS, IR[2] + min(gamma, 1) * IR[1])
 function dStoIR(gamma, dS)
     IRs = accumulate(partial(fakeSIRStep, gamma), dS; init=(0., 0.))
     [map(rpartial(getindex, i), IRs) for i in 1:2]
@@ -188,14 +194,14 @@ function SIR_ipopt_mle(I, R, X; model_type=:exponential,
     end
     @NLobjective(
         m, Max,
-        sum(W1[t] * log((a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t])
-            - W2[t] * (a + b * I[t]) * (1 - (I[t] + R[t]) / N) + g * I[t]
+        sum(W1[t] * log((a + b * I[t]) * (1 - (I[t] + R[t]) / N))
+            - W2[t] * (a + b * I[t]) * (1 - (I[t] + R[t]) / N)
             for t in 1:length(X)))
     optimize!(m)
-    Dict(:a => getvalue(a),
-         :beta => getvalue(b),
-         :gamma => getvalue(g),
-         :N => getvalue(N),
+    Dict(:a => value(a),
+         :beta => value(b),
+         :gamma => value(g),
+         :N => value(N),
          :llh => objective_value(m),
          :status => Int(termination_status(m)))
 end
