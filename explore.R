@@ -36,14 +36,6 @@ data = (
   + geom_line()
 )
 
-## (data
-##   %>% filter(year==2017)
-##   %>% ggplot(aes(week, dS, color=factor(region)))
-##   + geom_line()
-##   + theme_minimal()
-##   + theme(legend.position="bottom")
-## )
-
 peaks = (
   data
   %>% group_by(year, region)
@@ -194,20 +186,6 @@ trajs_agg = (trajs_with_dS
 )
 
 
-
-
-
-
-
-  ## %>% mutate(fisher=C^2 / (Ntrue - C) / Ntrue^2 / (Ntrue - C + Ntrue * gamma / beta))
-  ## %>% mutate(fisher=map(C, ~ cum_fisher_ub(Ntrue, beta, gamma, .x)))
-  %>% group_by(year, region, t, Ntrue)
-  %>% summarise(dS=mean(dS), fisher=mean(fisher))
-  %>% ungroup
-  %>% group_by(year, region, Ntrue)
-  %>% arrange(t)
-  ## %>% mutate(rel_err=1 / cumsum(fisher) / max(Ntrue)^2)
-)
 
 m_stars = (
   trajs_agg
@@ -426,7 +404,6 @@ x = (
 )
 
 (x
-  %>% filter(N < 1e5 -10)
   %>% ggplot(aes(N))
 + stat_ecdf()
 + scale_y_continuous(label=percent, name="Cum % Products")
@@ -435,4 +412,3 @@ x = (
 + scale_x_log10(name="Estimated N")
 )
 
-x %>% filter(N < 1e5 -10) %>% summarise(mean(N))

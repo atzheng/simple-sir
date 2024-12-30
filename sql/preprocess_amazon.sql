@@ -4,7 +4,7 @@ with base as (
     (ts - min(ts) over ( partition by id ))
       // (60 * 60 * 24 * 7) as week
   FROM read_csv(
-    'Electronics.csv',
+    '{{input}}',
     header=false,
     columns={
     'id': 'VARCHAR',

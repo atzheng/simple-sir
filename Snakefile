@@ -1,16 +1,11 @@
 import pandas as pd
 
-# ILINet data is manually downloaded from this dash:
-# https://gis.cdc.gov/grasp/fluview/fluportaldashboard.html.
 ilinet_targets = expand(
     "results/ILINet/trajectories/{year}/{region}.csv",
     year=range(2010, 2020),
     region=range(1, 11)
 )
 
-# Amazon data is downloaded from
-# https://cseweb.ucsd.edu/~jmcauley/datasets/amazon_v2/
-# and filtered / downsampled using sql/get_amazon_products.sql.
 amazon_products = pd.read_csv("data/amazon-products.csv").id.values
 amazon_targets = expand(
     "results/Amazon/estimates/{product}.csv",
@@ -36,6 +31,14 @@ rule ilinet:
 
 # ILINET
 # -------------------------------------------------------------------------
+rule download_ilinet:
+    output:
+        "data/ILINet.csv"
+    shell:
+        """
+        Rscript download-ilinet.R
+        """
+
 rule preprocess_ilinet:
     input:
         "data/ILINet.csv"
@@ -59,7 +62,7 @@ rule fit_sir:
         "results/ILINet/estimates/{year}/{region}.csv"
     shell:
         """
-        julia fit.jl        \
+        julia --project=.. fit.jl        \
         --input {input:q}   \
         --output {output:q} \
         --model_type sir    \
@@ -76,7 +79,7 @@ rule sample_trajectories:
         "results/ILINet/trajectories/{year}/{region}.csv"
     shell:
         """
-        julia sample-trajectories.jl    \
+        julia --project=.. sample-trajectories.jl    \
         --estimates {input.estimates:q} \
         --data {input.data:q}           \
         --output {output:q}             \
@@ -92,6 +95,7 @@ rule preprocess_amazon:
     shell:
         """
         id={wildcards.id}            \
+        input=data/amazon-raw.csv \
         output={output}              \
         j2 sql/preprocess_amazon.sql \
         | duckdb
@@ -105,7 +109,7 @@ rule fit_bass:
         "results/Amazon/estimates/{id}.csv"
     shell:
         """
-        julia fit.jl        \
+        julia --project=.. fit.jl        \
         --input {input:q}   \
         --output {output:q} \
         --model_type bass   \

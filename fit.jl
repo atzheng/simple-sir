@@ -63,6 +63,7 @@ function main()
     args = parse_commandline()
     df = DataFrame(CSV.File(args["input"]))
     dS = df[:, 2]
+    print(df)
     Nmax = maximum(df[:, 3])
     I, R = dStoIR(args["gamma"], df[:, 2])
 

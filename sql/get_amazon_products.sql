@@ -5,7 +5,7 @@ with reviews as (
     id,
     ts - min(ts) over (partition by id) as ts
   FROM read_csv(
-    'Electronics.csv',
+    '{{input}}',
     header=false,
     columns={
     'id': 'VARCHAR',
@@ -30,4 +30,4 @@ with reviews as (
 SELECT *
   FROM valid_products
  using sample reservoir(100 rows) repeatable (42)
-) to 'amazon-products.csv' with csv header;
+) to '{{ output }}' with csv header;
