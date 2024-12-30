@@ -222,4 +222,4 @@ to_num <- function(x) {
   suppressWarnings(as.numeric(x))
 }
 
-ilinet('hhs', years=2010:2020) %>% write_csv("data/ILInet.csv")
+ilinet('hhs', years=2010:2020) %>% write_csv("data/ILINet.csv")

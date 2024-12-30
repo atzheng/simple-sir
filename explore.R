@@ -1,9 +1,42 @@
 library(tidyverse)
+library(latex2exp)
+library(patchwork)
 library(scales)
+library(viridis)
 
 years = 2010:2019
 regions = 1:10
 
+schema = cols(
+  week=col_integer(),
+  dS=col_double(),
+  Nmax=col_double(),
+)
+
+
+# Read trajectories
+trajs = (
+  cross(list(year=years, region=regions))
+  %>% map_chr(~ file.path(
+                "results", "ILINet", "trajectories",
+                .x $ year, paste0(.x $ region, ".csv")
+              ))
+  %>% keep(file.exists)
+  %>% map_df(read_csv, col_types=cols(), id="fname")
+  %>% mutate(
+    region=basename(fname) %>% str_sub(1, -4) %>% as.integer,
+    year=dirname(fname) %>% basename %>% as.integer
+  )
+  %>% select(-fname)
+)
+
+# Add dS
+trajs_with_dS = (
+  trajs
+  %>% group_by(region, year, seed)
+  %>% arrange(t)
+  %>% mutate(dS=I - lag(I))
+)
 
 data = (
   cross(list(year=years, region=regions))
@@ -12,7 +45,7 @@ data = (
                 .x $ year, paste0(.x $ region, ".csv")
               ))
   %>% keep(file.exists)
-  %>% map_df(read_csv, col_types=cols(), id="fname")
+  %>% map_df(read_csv, col_types=schema, id="fname")
   %>% mutate(
     region=basename(fname) %>% str_sub(1, -4) %>% as.integer,
     year=dirname(fname) %>% basename %>% as.integer
@@ -73,11 +106,11 @@ thm1_samples = function(N, beta, gamma, thresh=1)
 ##   9 * x^2 / (0.5 * (0.5 + gamma / beta) * N^4)
 
 
-z = (1 / cumsum(fisher_ub(43817, 0.124, 0.24, 1:43817))) / (43817 ^ 2)
+## z = (1 / cumsum(fisher_ub(43817, 0.124, 0.24, 1:43817))) / (43817 ^ 2)
 
-which.max(z < 1)
+## which.max(z < 1)
 
-thm1_samples(43817, 0.124, 0.24)
+## thm1_samples(43817, 0.124, 0.24)
 
 final_results <- (
   results
@@ -116,51 +149,20 @@ to_plot = (final_results
   + coord_cartesian(xlim=c(0, 35))
 )
 
-to_plot %>% ungroup %>% summarise(median(mstar_t / const_frac_t))
-
-
-
-# Read trajectories
-trajs = (
-  cross(list(year=years, region=regions))
-  %>% map_chr(~ file.path(
-                "results", "ILINet", "trajectories",
-                .x $ year, paste0(.x $ region, ".csv")
-              ))
-  %>% keep(file.exists)
-  %>% map_df(read_csv, col_types=cols(), id="fname")
-  %>% mutate(
-    region=basename(fname) %>% str_sub(1, -4) %>% as.integer,
-    year=dirname(fname) %>% basename %>% as.integer
-  )
-  %>% select(-fname)
-)
-
-# Add dS
-trajs_with_dS = (
-  trajs
-  %>% group_by(region, year, seed)
-  %>% arrange(t)
-  %>% mutate(dS=I - lag(I))
-)
-
+# to_plot %>% ungroup %>% summarise(median(mstar_t / const_frac_t))
 
 fisher_ub <- function(N, beta, gamma, x)
   x^2 / ((N - x) * N^2 * (N - x + N * gamma / beta))
 
 
-data.frame(
-  Ntrue =
-)
-
-trajs_agg = (
-  trajs_with_dS
-  %>% inner_join(final_results, by=c("region", "year"))
-  %>% mutate(C=I + R)
-  %>% mutate(fisher=C^2 / (Ntrue - C) / Ntrue^2 / (Ntrue - C + Ntrue * gamma / beta)) %>% mutate(fisher=map(C, ~ cum_fisher_ub(Ntrue, beta, gamma, .x)))
-  %>% group_by(year, region, t, Ntrue)
-  %>% summarise(dS=mean(dS), m_star_t=mean(fisher))
-)
+## trajs_agg = (
+##   trajs_with_dS
+##   %>% inner_join(final_results, by=c("region", "year"))
+##   %>% mutate(C=I + R)
+##   %>% mutate(fisher=C^2 / (Ntrue - C) / Ntrue^2 / (Ntrue - C + Ntrue * gamma / beta)) %>% mutate(fisher=map(C, ~ cum_fisher_ub(Ntrue, beta, gamma, .x)))
+##   %>% group_by(year, region, t, Ntrue)
+##   %>% summarise(dS=mean(dS), m_star_t=mean(fisher))
+## )
 
 # Aggregate over seeds
 
@@ -201,7 +203,8 @@ m_stars = (
       )
 )
 
-(m_stars %>% ggplot(aes(m_star_t, m_peak_t))
+(
+  m_stars %>% ggplot(aes(m_star_t, m_peak_t))
   + geom_point()
   + theme_minimal()
   + theme(legend.position="bottom")
@@ -209,8 +212,6 @@ m_stars = (
 )
 
 
-library(latex2exp)
-library(viridis)
 
 leftovers = (trajs
   %>% group_by(region, year, seed)
@@ -239,6 +240,7 @@ toplot = (data
       )
 )
 
+# Fig. 4 ###############################################################
 (toplot
   %>% ggplot(aes(m_star_t / peak_t))
   + theme_minimal()
@@ -247,6 +249,7 @@ toplot = (data
   + scale_y_continuous(label=percent, name="Cum % Region-Years")
   + scale_x_continuous(label=percent, name="Weeks to RelError = 1 / Weeks to Peak")
 )
+###############################################################
 
 
 (toplot
@@ -267,7 +270,6 @@ toplot = (data
 )
 
 
-library(patchwork)
 
 rel = (toplot
   %>% ggplot(aes(m_star_t, y=..count.. / sum(..count..)))
@@ -370,7 +372,7 @@ rel | pk
   ## + geom_text(aes(label=scales::percent(pct)), size=3,
   ##             color="gray", fontface="bold")
   + geom_abline(linetype='dashed', alpha=0.4)
-  + scale_fill_viridis()
+  ## + scale_fill_viridis()
   + scale_x_continuous(
       breaks=seq(0, 52, 2),
       name=TeX("Weeks to RelError = $o(1)$")

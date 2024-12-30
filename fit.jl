@@ -25,6 +25,9 @@ function parse_commandline()
         "--N"
             arg_type = Float64
             default = 0.
+        "--tol"
+            arg_type = Float64
+            default = 1e-12
     end
     return parse_args(s)
 end
@@ -48,7 +51,7 @@ function fit(I, R, X, Nmax; model_type=:sir, gamma=0., N=0.)
             N=N,
             kwargs...
                 )
-    if N == 0.
+    if N == 0.  # Fit with N unknown
         opt_N = optimize(
             N -> - fit_given_N(N)[:llh],
             maximum(I .+ R), Nmax, GoldenSection()
@@ -63,7 +66,6 @@ function main()
     args = parse_commandline()
     df = DataFrame(CSV.File(args["input"]))
     dS = df[:, 2]
-    print(df)
     Nmax = maximum(df[:, 3])
     I, R = dStoIR(args["gamma"], df[:, 2])
 

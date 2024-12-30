@@ -1,10 +1,16 @@
 import pandas as pd
 
 ilinet_targets = expand(
-    "results/ILINet/trajectories/{year}/{region}.csv",
-    year=range(2010, 2020),
-    region=range(1, 11)
+    "results/ILINet/peaks/{type}/{year}/{region}.csv",
+    year=range(2011, 2020),
+    region=range(1, 11),
+    type=["estimates", "estimates_true_N"]
+)+ expand(
+    "results/ILINet/actual_trajectories/{year}/{region}.csv",
+    year=range(2011, 2020),
+    region=range(1, 11),
 )
+
 
 amazon_products = pd.read_csv("data/amazon-products.csv").id.values
 amazon_targets = expand(
@@ -67,11 +73,57 @@ rule fit_sir:
         --output {output:q} \
         --model_type sir    \
         --gamma 1.68        \
-        --samples 1   # only fit the trajectory as a whole
+        --samples 100
+        """
+
+
+rule fit_sir_with_true_N:
+    """
+    Refit the SIR model with the N estimated using all data, to demonstrate
+    that estimating N is the hard part.
+    """
+    input:
+        data="data/ILINet/{year}/{region}.csv",
+        est="results/ILINet/estimates/{year}/{region}.csv"
+    output:
+        "results/ILINet/estimates_true_N/{year}/{region}.csv"
+    shell:
+        """
+        julia --project=.. fit.jl \
+        --input {input.data:q}    \
+        --output {output:q}       \
+        --model_type sir          \
+        --gamma 1.68              \
+        --samples 100             \
+        --N $(csvcut -c N {input.est} | tail -n 1)
+        """
+
+
+rule get_peaks:
+    """
+    Compute the peak times and infection rates
+    for the estimated SIR models
+    """
+    input:
+        estimate="results/ILINet/{type}/{year}/{region}.csv",
+        data="data/ILINet/{year}/{region}.csv",
+    output:
+        "results/ILINet/peaks/{type}/{year}/{region}.csv"
+    shell:
+        """
+        julia --project=.. fit-flu-peaks.jl \
+        --estimates {input.estimate}        \
+        --data {input.data}                 \
+        --output {output}                   \
+        --gamma 1.68                        \
+        --seeds 50
         """
 
 
 rule sample_trajectories:
+    """
+    Sample trajectories from the estimated SIR models
+    """
     input:
         estimates="results/ILINet/estimates/{year}/{region}.csv",
         data="data/ILINet/{year}/{region}.csv"
@@ -79,11 +131,28 @@ rule sample_trajectories:
         "results/ILINet/trajectories/{year}/{region}.csv"
     shell:
         """
-        julia --project=.. sample-trajectories.jl    \
-        --estimates {input.estimates:q} \
-        --data {input.data:q}           \
-        --output {output:q}             \
+        julia --project=.. sample-trajectories.jl \
+        --estimates {input.estimates:q}           \
+        --data {input.data:q}                     \
+        --output {output:q}                       \
         --seeds 20
+        """
+
+
+rule convert_data_to_trajectories:
+    """
+    Convert the ILINet data to trajectories, for visualization
+    """
+    input:
+        "data/ILINet/{year}/{region}.csv"
+    output:
+        "results/ILINet/actual_trajectories/{year}/{region}.csv"
+    shell:
+        """
+        julia --project=.. convert-data-to-trajectories.jl \
+        --data {input:q} \
+        --output {output:q} \
+        --gamma=1.68
         """
 
 
@@ -95,7 +164,7 @@ rule preprocess_amazon:
     shell:
         """
         id={wildcards.id}            \
-        input=data/amazon-raw.csv \
+        input=data/amazon-raw.csv    \
         output={output}              \
         j2 sql/preprocess_amazon.sql \
         | duckdb

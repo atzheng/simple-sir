@@ -176,9 +176,12 @@ function dStoIR(gamma, dS)
     [map(rpartial(getindex, i), IRs) for i in 1:2]
 end
 
-function SIR_ipopt_mle(I, R, X; model_type=:exponential,
-                       a=nothing, b=nothing, g=nothing,
-                       N=nothing, Nmax=1e5)
+function SIR_ipopt_mle(
+    I, R, X;
+    model_type=:exponential,
+    a=nothing, b=nothing, g=nothing,
+    N=nothing, Nmax=1e5
+    )
     m = Model(Ipopt.Optimizer)
     if a == nothing @variable(m, a >= 0) end
     if b == nothing @variable(m, b >= 0) end
